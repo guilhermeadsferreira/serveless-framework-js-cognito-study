@@ -1,0 +1,131 @@
+# "org" ensures this Service is used with the correct Serverless Framework Access Key.
+org: adsforg
+# "app" enables Serverless Framework Dashboard features and sharing them with other Services.
+app: cognito-auth
+# "service" is the name of this project. This will also be added to your AWS resource names.
+service: cognito-study
+
+provider:
+  name: aws
+  region: us-east-1
+  runtime: nodejs20.x
+  deploymentMethod: direct
+  architecture: arm64
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action: cognito-idp:AdminGetUser
+          Resource: !GetAtt CognitoUserPool.Arn
+  environment:
+    COGNITO_CLIENT_ID: !Ref LiveUserPoolClient
+    COGNITO_POOL_ID: !Ref CognitoUserPool
+  httpApi:
+    authorizers:
+      CognitoAuthorizer:
+        type: jwt
+        identitySource: $request.header.Authorization
+        issuerUrl: !GetAtt CognitoUserPool.ProviderURL
+        audience:
+          - !Ref LiveUserPoolClient
+
+resources:
+  Resources:
+    CognitoUserPool:
+      Type: AWS::Cognito::UserPool
+      Properties:
+        DeletionProtection: INACTIVE
+        UserPoolName: LiveUserPool
+        MfaConfiguration: OFF
+        AutoVerifiedAttributes:
+          - email
+        AdminCreateUserConfig:
+          AllowAdminCreateUserOnly: false
+        UsernameAttributes:
+          - email
+        AccountRecoverySetting:
+          RecoveryMechanisms:
+            - Name: verified_email
+              Priority: 1
+        Policies:
+          PasswordPolicy:
+            MinimumLength: 10
+            RequireLowercase: true
+            RequireNumbers: false
+            RequireSymbols: false
+            RequireUppercase: true
+            TemporaryPasswordValidityDays: 7
+        Schema:
+          - Name: given_name
+            AttributeDataType: String
+            Mutable: true
+            Required: true
+          - Name: family_name
+            AttributeDataType: String
+            Mutable: true
+            Required: true
+    LiveUserPoolClient:
+      Type: AWS::Cognito::UserPoolClient
+      Properties:
+        ClientName: LiveUserPoolClient
+        UserPoolId: !Ref CognitoUserPool
+        ExplicitAuthFlows:
+          - ALLOW_USER_PASSWORD_AUTH
+          - ALLOW_REFRESH_TOKEN_AUTH
+        TokenValidityUnits:
+          AccessToken: hours
+          RefreshToken: hours
+        AccessTokenValidity: 3
+        RefreshTokenValidity: 1440 # 60 days
+
+functions:
+  signUp:
+    handler: src/functions/sign-up.handler
+    events:
+      - httpApi:
+          method: POST
+          path: /auth/sign-up
+
+  accountConfirmation:
+    handler: src/functions/account-confirmation.handler
+    events:
+      - httpApi:
+          method: POST
+          path: /auth/account-confirmation
+
+  signIn:
+    handler: src/functions/sign-in.handler
+    events:
+      - httpApi:
+          method: POST
+          path: /auth/sign-in
+
+  refreshToken:
+    handler: src/functions/refresh-token.handler
+    events:
+      - httpApi:
+          method: POST
+          path: /auth/refresh-token
+
+  forgotPassword:
+    handler: src/functions/forgot-password.handler
+    events:
+      - httpApi:
+          method: POST
+          path: /auth/forgot-password
+
+  resetPassword:
+    handler: src/functions/reset-password.handler
+    events:
+      - httpApi:
+          method: POST
+          path: /auth/reset-password
+
+  profile:
+    handler: src/functions/profile.handler
+    events:
+      - httpApi:
+          method: GET
+          path: /profile
+          authorizer:
+            name: CognitoAuthorizer
