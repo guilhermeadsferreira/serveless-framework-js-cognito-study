@@ -48,6 +48,8 @@ export async function handler(event: APIGatewayProxyEventV2) {
       });
     }
 
+    console.log({ error });
+
     return response(500, {
       error: 'Something went wrong',
     });
